@@ -1,6 +1,5 @@
 # Loss Ploter  
 
-<img src="./example.png">  
 
 1. select cruves by click curve or legend(deep color means selected)  
 2. single select mode can be set by 'single_select=True', defalut False  

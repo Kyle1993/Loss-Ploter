@@ -1,23 +1,89 @@
-import matplotlib.pyplot as plt
-from matplotlib.widgets import Button
+import matplotlib
+matplotlib.use('TkAgg')
+
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+
+import sys
+if sys.version_info[0] < 3:
+    import Tkinter as Tk
+else:
+    import tkinter as Tk
+
+from matplotlib.figure import Figure
 import numpy as np
+import pickle
 
 class LossPlot:
-    def __init__(self,alpha=0.4,window_size=(16, 8),smooth=0,single_select=True,title='Loss Polt'):
+    def __init__(self,alpha=0.3,window_size=(16, 8),single_select=False,title='Loss Polt'):
         self.records = []
         self.alpha = alpha
         self.single_select = single_select
-        self.smooth = smooth
         self.ID = 0
-        self.first_click = True
+        self.curves_select = []
+        self.init_smooth = 0
+        self.init_x_range = [None,None]
+        self.init_y_range = [None,None]
+        self.smooth = self.init_smooth
+        self.x_range = self.init_x_range
+        self.y_range = self.init_y_range
+        self.select_ID = None
 
-        self.fig, (self.ax, self.ax_text) = plt.subplots(1, 2, gridspec_kw={'width_ratios': [3, 1]},figsize=window_size)
-        self.ax.set_title(title)
+        self.title = title
+
+        self.fig = Figure(figsize=window_size)
+        self.ax, self.ax_text = self.fig.subplots(1, 2, gridspec_kw={'width_ratios': [3, 1]},)
+        self.ax.set_title(self.title)
         self.ax_text.set_title('Summary')
         self.ax_text.axis('off')
-        # self.ax_text.set_xticks([])
-        # self.ax_text.set_yticks([])
         self.print_()
+
+        axcolor = 'lightgoldenrodyellow'
+        # rax = Axes(,[0.05, 0.7, 0.15, 0.15], facecolor=axcolor,)
+        # radio = RadioButtons(self.ax, ('2 Hz', '4 Hz', '8 Hz'))
+
+        # set Tk
+        self.root = Tk.Tk()
+        self.root.wm_title("LossPloter")
+
+        canvas = FigureCanvasTkAgg(self.fig, master=self.root)
+        canvas.get_tk_widget().pack(side=Tk.TOP, fill=Tk.BOTH, expand=1)
+
+        reset_button = Tk.Button(master=self.root, text='Reset', command=self.reset_clicked,width=5)
+        reset_button.place(relx=.63, rely=.95, anchor="c")
+
+        set_button = Tk.Button(master=self.root, text='Set', command=self.set_click,width=5)
+        set_button.place(relx=.53, rely=.95, anchor="c")
+
+        exit_button = Tk.Button(master=self.root, text='Exit', command=self._quit,width=5)
+        exit_button.place(relx=.83, rely=.95, anchor="c")
+
+        selectAll_button = Tk.Button(master=self.root, text='Select All',command=self.select_all, width=8)
+        selectAll_button.place(relx=.62, rely=.15, anchor="c")
+
+        selectNone_button = Tk.Button(master=self.root, text='Select None',command=self.select_none, width=8)
+        selectNone_button.place(relx=.62, rely=.2, anchor="c")
+
+        smooth_label = Tk.Label(self.root,text='smooth:')
+        smooth_label.place(relx=.15, rely=.95, anchor="c")
+        self.smooth_text = Tk.Entry(master=self.root,width=5,)
+        self.smooth_text.config(state=Tk.NORMAL)
+        self.smooth_text.insert(Tk.END,self.init_smooth)
+        self.smooth_text.place(relx=0.18, rely=.95, anchor="c")
+
+        xrange_label = Tk.Label(self.root, text='x range:')
+        xrange_label.place(relx=.25, rely=.95, anchor="c")
+        self.xrange_text = Tk.Entry(master=self.root, width=10, )
+        self.xrange_text.config(state=Tk.NORMAL)
+        self.xrange_text.insert(Tk.END, '{},{}'.format(self.init_x_range[0],self.init_x_range[1]))
+        self.xrange_text.place(relx=0.29, rely=.95, anchor="c")
+
+        yrange_label = Tk.Label(self.root, text='y range:')
+        yrange_label.place(relx=.35, rely=.95, anchor="c")
+        self.yrange_text = Tk.Entry(master=self.root, width=10, )
+        self.xrange_text.config(state=Tk.NORMAL)
+        self.yrange_text.insert(Tk.END, '{},{}'.format(self.init_y_range[0],self.init_y_range[1]))
+        self.yrange_text.place(relx=0.39, rely=.95, anchor="c")
+
 
     def print_(self):
         print('Note:')
@@ -37,6 +103,7 @@ class LossPlot:
         summary = self.record_summary(record)
         self.records.append({'record':record,'color':color,'name':name,'note':note,'summary':summary})
         self.ID += 1
+        self.curves_select.append(True)
 
     def append_rcd(self,rcd_file,color=None):
         with open(rcd_file,'rb') as f:
@@ -46,12 +113,31 @@ class LossPlot:
         note = rcd['note']
         self.append(record,name,color,note)
 
-    def window_smooth(self,record):
+    def window_smooth(self,record,smooth):
+        assert smooth >= 0
         res = np.copy(record)
         for i in range(record.shape[0]):
-            window_min = max(0,i-self.smooth)
-            window_max = min(record.shape[0]-1,i+self.smooth)+1
+            window_min = max(0,i-smooth)
+            window_max = min(record.shape[0]-1,i+smooth)+1
             res[i,1] = np.mean(res[window_min:window_max,1])
+        return res
+
+    def clip_record(self,record,x_range,y_range):
+        res = np.copy(record)
+
+        x_min = res[:,0].min() if x_range[0] is None else max(x_range[0],res[:,0].min())
+        x_max = res[:,0].max() if x_range[1] is None else min(x_range[1],res[:,0].max())
+        assert x_min < x_max
+
+        res = res[res[:,0]>=x_min]
+        res = res[res[:,0]<=x_max]
+
+        y_min = res[:,1].min() if y_range[0] is None else y_range[0]
+        y_max = res[:,1].max() if y_range[1] is None else y_range[1]
+        assert y_min < y_max
+
+        res[:,1] = np.clip(res[:,1],y_min,y_max)
+
         return res
 
     def get_curve_summary_string(self,ID):
@@ -75,7 +161,7 @@ class LossPlot:
 
         return string
 
-    def get_summary_string(self, ):
+    def get_total_summary_string(self, ):
         min_value = np.inf
         min_cruve = None
         max_value = -np.inf
@@ -93,27 +179,33 @@ class LossPlot:
 
         return string
 
-    def set_carve_summary(self,ID):
-        if ID is None:
+    def refresh_summary(self,):
+        self.ax_text.cla()
+        self.ax_text.set_title('Summary')
+        self.ax_text.axis('off')
+
+        if self.select_ID is None:
             self.ax_text.text(0.03, 0.98, 'No Select', horizontalalignment='left', verticalalignment='top',fontdict={'family': 'monospace', 'weight': 'bold'})
             self.ax_text.text(0.03, 0.93, '', horizontalalignment='left', verticalalignment='top',fontdict={'family': 'monospace','weight':'medium'})
         else:
-            name = self.records[ID]['name']
-            config_str = self.get_curve_summary_string(ID)
+            name = self.records[self.select_ID]['name']
+            config_str = self.get_curve_summary_string(self.select_ID)
             self.ax_text.text(0.03, 0.98, name,horizontalalignment='left',verticalalignment='top',fontdict={'family': 'monospace','weight':'bold'})
             self.ax_text.text(0.03, 0.93, 'Config:',horizontalalignment='left',verticalalignment='top',fontdict={'family': 'monospace','weight':'bold'})
             self.ax_text.text(0.03, 0.90, config_str,horizontalalignment='left',verticalalignment='top',fontdict={'family': 'monospace','weight':'medium'})
 
-    def set_summary(self,):
-        summary = self.get_summary_string()
-        self.ax_text.text(0.03, 0.3, 'Summary:',horizontalalignment='left',verticalalignment='top',fontdict={'family': 'monospace','weight':'bold'})
-        self.ax_text.text(0.03, 0.25, summary,horizontalalignment='left',verticalalignment='top',fontdict={'family': 'monospace','weight':'medium'})
+        summary = self.get_total_summary_string()
+        self.ax_text.text(0.03, 0.3, 'Summary:', horizontalalignment='left', verticalalignment='top',fontdict={'family': 'monospace', 'weight': 'bold'})
+        self.ax_text.text(0.03, 0.25, summary, horizontalalignment='left', verticalalignment='top',fontdict={'family': 'monospace', 'weight': 'medium'})
 
-    def init_fig(self,):
+    def refresh_fig(self,):
+        self.ax.cla()
+        self.ax.set_title(self.title)
+
         self.curves = []
-        self.curves_select = [True for i in range(self.ID)]
         for curve_data in self.records:
-            r = self.window_smooth(curve_data['record'])
+            r = self.window_smooth(curve_data['record'],self.smooth)
+            r = self.clip_record(r,self.x_range,self.y_range)
             c, = self.ax.plot(r[:,0],r[:,1],lw=1,color=curve_data['color'],label=str(curve_data['name'])) # 注意!要个','
             self.curves.append(c)
 
@@ -129,50 +221,8 @@ class LossPlot:
 
         self.line2ID = {}
         for i,line in enumerate(self.curves):
-            line.set_picker(5)
+            line.set_picker(3)
             self.line2ID[line] = i
-
-        global button  # must global
-        point = plt.axes([0.3, 0.03, 0.1, 0.03])
-        button = Button(point, "reset")
-        button.on_clicked(self.reset_clicked)
-
-        self.set_carve_summary(None)
-        self.set_summary()
-
-    def reset_clicked(self,event):
-        self.first_click = True
-        for i in range(self.ID):
-            self.leglines[i].set_alpha(1)
-            self.curves[i].set_alpha(1)
-
-        for i,_ in enumerate(self.curves_select):
-            self.curves_select[i] = True
-
-        self.ax_text.cla()
-        self.ax_text.set_title('Summary')
-        self.ax_text.axis('off')
-        self.set_carve_summary(None)
-        self.set_summary()
-        self.fig.canvas.draw()
-
-    def onpick(self,event, ):
-        click = event.artist
-
-        # reset
-        if self.single_select:
-            self.curves_select = [False for i in range(self.ID)]
-        else:
-            if self.first_click:
-                self.curves_select = [False for i in range(self.ID)]
-                self.first_click = False
-
-        if click in self.legline2ID:
-            ID = self.legline2ID[click]
-            self.curves_select[ID] = not self.curves_select[ID]
-        elif click in self.line2ID:
-            ID = self.line2ID[click]
-            self.curves_select[ID] = not self.curves_select[ID]
 
         # re-plot
         for i in range(self.ID):
@@ -183,18 +233,89 @@ class LossPlot:
                 self.leglines[i].set_alpha(self.alpha)
                 self.curves[i].set_alpha(self.alpha)
 
-        self.ax_text.cla()
-        self.ax_text.set_title('Summary')
-        self.ax_text.axis('off')
-        self.set_carve_summary(ID)
-        self.set_summary()
+    def reset_clicked(self,):
+        for i,_ in enumerate(self.curves_select):
+            self.curves_select[i] = True
+        self.select_ID = None
+        self.smooth = self.init_smooth
+        self.x_range = self.init_x_range
+        self.y_range = self.init_y_range
+
+        self.smooth_text.delete(0, Tk.END)
+        self.xrange_text.delete(0, Tk.END)
+        self.yrange_text.delete(0, Tk.END)
+        self.smooth_text.insert(Tk.END,self.init_smooth)
+        self.xrange_text.insert(Tk.END, '{}-{}'.format(self.init_x_range[0],self.init_x_range[1]))
+        self.yrange_text.insert(Tk.END, '{}-{}'.format(self.init_y_range[0],self.init_y_range[1]))
+
+
+        self.refresh_fig()
+        self.refresh_summary()
+
         self.fig.canvas.draw()
 
-    def show(self):
-        self.init_fig()
-        self.fig.canvas.mpl_connect('pick_event', self.onpick)
 
-        plt.show()
+    def set_click(self):
+        if self.smooth_text.get() != '':
+            self.smooth = int(self.smooth_text.get())
+        if len(self.xrange_text.get().split(','))==2:
+            xrange = self.xrange_text.get()
+            self.x_range = [int(x) if x != 'None' else None for x in xrange.split(',')]
+        if len(self.yrange_text.get().split(','))==2:
+            yrange = self.yrange_text.get()
+            self.y_range = [float(y) if y!='None' else None for y in yrange.split(',')]
+
+        self.refresh_fig()
+
+        self.fig.canvas.draw()
+
+    def select_all(self):
+        self.curves_select = [True for i in range(self.ID)]
+
+        self.refresh_fig()
+        self.refresh_summary()
+
+        self.fig.canvas.draw()
+
+    def select_none(self):
+        self.curves_select = [False for i in range(self.ID)]
+
+        self.refresh_fig()
+        self.refresh_summary()
+
+        self.fig.canvas.draw()
+
+
+    def onpick(self,event, ):
+        click = event.artist
+
+        # reset
+        if self.single_select:
+            self.curves_select = [False for i in range(self.ID)]
+
+        if click in self.legline2ID:
+            self.select_ID = self.legline2ID[click]
+            self.curves_select[self.select_ID] = not self.curves_select[self.select_ID]
+        elif click in self.line2ID:
+            self.select_ID = self.line2ID[click]
+            self.curves_select[self.select_ID] = not self.curves_select[self.select_ID]
+
+        self.refresh_fig()
+        self.refresh_summary()
+
+        self.fig.canvas.draw()
+
+    def _quit(self,):
+        self.root.quit()
+        self.root.destroy()
+
+    def show(self):
+        self.refresh_fig()
+        self.refresh_summary()
+
+        self.fig.canvas.draw()
+        self.fig.canvas.mpl_connect('pick_event', self.onpick)
+        self.root.mainloop()
 
 
 
@@ -203,19 +324,22 @@ if __name__ == '__main__':
     import pickle
 
     x = np.arange(0,1000,10)
-    y1 = [np.sin(i/100) for i in x]
-    y2 = [2 * np.sin(i/200) for i in x]
-    y3 = [0.5 * np.sin(i/300) for i in x]
+    y1 = [0.5 * np.sin(i/50) for i in x]
+    y2 = [1 * np.sin(i/100) for i in x]
+    y3 = [1.5 * np.sin(i/200) for i in x]
+    y4 = [2 * np.sin(i/300) for i in x]
 
     record1 = list(zip(x,y1))
     record2 = list(zip(x,y2))
     record3 = list(zip(x,y3))
+    record4 = list(zip(x,y4))
 
-    ploter = LossPlot(alpha=0.2,single_select=True,smooth=0)
+    ploter = LossPlot(alpha=0.3,single_select=False,)
 
     ploter.append(record1,color='red',name='record1',note={'lr':0.01,'batch_size':64,'weight_decay':1e-3})
     ploter.append(record2,color='blue',name='record2',note={'asd':10,'aa':'asd','zx':12312})
     ploter.append(record3,color=None,name='record3',note={'1':10,'2':'asd','3':0.312})
+    ploter.append(record4,color=None,name='record4',)
 
 
     ploter.show()
