@@ -3,7 +3,7 @@ from matplotlib.widgets import Button
 import numpy as np
 
 class LossPlot:
-    def __init__(self,alpha=0.4,smooth=0,single_select=False,title='Loss Polt'):
+    def __init__(self,alpha=0.4,window_size=(16, 8),smooth=0,single_select=True,title='Loss Polt'):
         self.records = []
         self.alpha = alpha
         self.single_select = single_select
@@ -11,13 +11,12 @@ class LossPlot:
         self.ID = 0
         self.first_click = True
 
-        self.fig, (self.ax, self.ax_text) = plt.subplots(1, 2, gridspec_kw={'width_ratios': [3, 1]},figsize=(16, 8))
-        self.mono = {'family': 'monospace'}  # text align
+        self.fig, (self.ax, self.ax_text) = plt.subplots(1, 2, gridspec_kw={'width_ratios': [3, 1]},figsize=window_size)
         self.ax.set_title(title)
         self.ax_text.set_title('Summary')
-        self.ax_text.set_xticks([])
-        self.ax_text.set_yticks([])
-
+        self.ax_text.axis('off')
+        # self.ax_text.set_xticks([])
+        # self.ax_text.set_yticks([])
         self.print_()
 
     def print_(self):
@@ -39,6 +38,14 @@ class LossPlot:
         self.records.append({'record':record,'color':color,'name':name,'note':note,'summary':summary})
         self.ID += 1
 
+    def append_rcd(self,rcd_file,color=None):
+        with open(rcd_file,'rb') as f:
+            rcd = pickle.load(f)
+        record = rcd['record']
+        name = rcd['name']
+        note = rcd['note']
+        self.append(record,name,color,note)
+
     def window_smooth(self,record):
         res = np.copy(record)
         for i in range(record.shape[0]):
@@ -47,21 +54,24 @@ class LossPlot:
             res[i,1] = np.mean(res[window_min:window_max,1])
         return res
 
-    def get_curve_summary_string(self,name,note,summary):
-        string = 'Config:{}\n'.format(name)
+    def get_curve_summary_string(self,ID):
+        note = self.records[ID]['note']
+        summary = self.records[ID]['summary']
+
+        string = ''
         if isinstance(note,str):
             string += note
         elif isinstance(note,dict):
             for i,v in note.items():
-                string += '{:<20}:{:<10}\n'.format(i,v)
+                string += '{:<10}:{:<10}\n'.format(i,str(v))
         else:
             string += 'None\n'
 
         min_data = summary['min']
         max_data = summary['max']
-        string += '\nCurve Summary:{}\n'.format(name)
-        string += 'Min Value:{:>8.5f} at step {:<5d}\n'.format(min_data[1],int(min_data[0]))
-        string += 'Max Value:{:>8.5f} at step {:<5d}\n'.format(max_data[1],int(max_data[0]))
+        string += '\nCurve Summary:\n'
+        string += 'Min Value:{:<.5f} at step {:<5d}\n'.format(min_data[1],int(min_data[0]))
+        string += 'Max Value:{:<.5f} at step {:<5d}\n'.format(max_data[1],int(max_data[0]))
 
         return string
 
@@ -76,22 +86,28 @@ class LossPlot:
                     max_cruve = r['name']
                 if r['summary']['min'][1] < min_value:
                     min_cruve = r['name']
-        string = 'Summary:\n\n'
+        string = ''
         string += 'Max Value in Curve:{}\n'.format(max_cruve)
         string += 'Min Value in Curve:{}\n'.format(min_cruve)
         string += '\nNote: compare only in selected\n      curves'
 
         return string
 
-    def set_carve_summary(self,string):
-        self.ax_text.set_xticks([])
-        self.ax_text.set_yticks([])
-        self.ax_text.text(0.03, 0.98, string,horizontalalignment='left',verticalalignment='top',fontdict=self.mono)
+    def set_carve_summary(self,ID):
+        if ID is None:
+            self.ax_text.text(0.03, 0.98, 'No Select', horizontalalignment='left', verticalalignment='top',fontdict={'family': 'monospace', 'weight': 'bold'})
+            self.ax_text.text(0.03, 0.93, '', horizontalalignment='left', verticalalignment='top',fontdict={'family': 'monospace','weight':'medium'})
+        else:
+            name = self.records[ID]['name']
+            config_str = self.get_curve_summary_string(ID)
+            self.ax_text.text(0.03, 0.98, name,horizontalalignment='left',verticalalignment='top',fontdict={'family': 'monospace','weight':'bold'})
+            self.ax_text.text(0.03, 0.93, 'Config:',horizontalalignment='left',verticalalignment='top',fontdict={'family': 'monospace','weight':'bold'})
+            self.ax_text.text(0.03, 0.90, config_str,horizontalalignment='left',verticalalignment='top',fontdict={'family': 'monospace','weight':'medium'})
 
-    def set_summary(self,string):
-        self.ax_text.set_xticks([])
-        self.ax_text.set_yticks([])
-        self.ax_text.text(0.03, 0.3, string,horizontalalignment='left',verticalalignment='top',fontdict=self.mono)
+    def set_summary(self,):
+        summary = self.get_summary_string()
+        self.ax_text.text(0.03, 0.3, 'Summary:',horizontalalignment='left',verticalalignment='top',fontdict={'family': 'monospace','weight':'bold'})
+        self.ax_text.text(0.03, 0.25, summary,horizontalalignment='left',verticalalignment='top',fontdict={'family': 'monospace','weight':'medium'})
 
     def init_fig(self,):
         self.curves = []
@@ -121,8 +137,8 @@ class LossPlot:
         button = Button(point, "reset")
         button.on_clicked(self.reset_clicked)
 
-        self.set_carve_summary('No Select')
-        self.set_summary(self.get_summary_string())
+        self.set_carve_summary(None)
+        self.set_summary()
 
     def reset_clicked(self,event):
         self.first_click = True
@@ -134,8 +150,10 @@ class LossPlot:
             self.curves_select[i] = True
 
         self.ax_text.cla()
-        self.set_carve_summary('No Select')
-        self.set_summary(self.get_summary_string())
+        self.ax_text.set_title('Summary')
+        self.ax_text.axis('off')
+        self.set_carve_summary(None)
+        self.set_summary()
         self.fig.canvas.draw()
 
     def onpick(self,event, ):
@@ -165,14 +183,11 @@ class LossPlot:
                 self.leglines[i].set_alpha(self.alpha)
                 self.curves[i].set_alpha(self.alpha)
 
-        note = self.records[ID]['note']
-        summary = self.records[ID]['summary']
-        name = self.records[ID]['name']
-        note = self.get_curve_summary_string(name,note,summary)
-        summary = self.get_summary_string()
         self.ax_text.cla()
-        self.set_carve_summary(note)
-        self.set_summary(summary)
+        self.ax_text.set_title('Summary')
+        self.ax_text.axis('off')
+        self.set_carve_summary(ID)
+        self.set_summary()
         self.fig.canvas.draw()
 
     def show(self):
