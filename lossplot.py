@@ -245,8 +245,8 @@ class LossPlot:
         self.xrange_text.delete(0, Tk.END)
         self.yrange_text.delete(0, Tk.END)
         self.smooth_text.insert(Tk.END,self.init_smooth)
-        self.xrange_text.insert(Tk.END, '{}-{}'.format(self.init_x_range[0],self.init_x_range[1]))
-        self.yrange_text.insert(Tk.END, '{}-{}'.format(self.init_y_range[0],self.init_y_range[1]))
+        self.xrange_text.insert(Tk.END, '{},{}'.format(self.init_x_range[0],self.init_x_range[1]))
+        self.yrange_text.insert(Tk.END, '{},{}'.format(self.init_y_range[0],self.init_y_range[1]))
 
 
         self.refresh_fig()
