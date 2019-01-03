@@ -14,7 +14,7 @@ import numpy as np
 import pickle
 
 class LossPlot:
-    def __init__(self,alpha=0.3,window_size=(16, 8),single_select=False,title='Loss Polt'):
+    def __init__(self,alpha=0.3,show_legend=True,window_size=(16, 8),single_select=False,title='Loss Polt'):
         self.records = []
         self.alpha = alpha
         self.single_select = single_select
@@ -27,6 +27,7 @@ class LossPlot:
         self.x_range = self.init_x_range
         self.y_range = self.init_y_range
         self.select_ID = None
+        self.show_legend = show_legend
 
         self.title = title
 
@@ -37,9 +38,6 @@ class LossPlot:
         self.ax_text.axis('off')
         self.print_()
 
-        axcolor = 'lightgoldenrodyellow'
-        # rax = Axes(,[0.05, 0.7, 0.15, 0.15], facecolor=axcolor,)
-        # radio = RadioButtons(self.ax, ('2 Hz', '4 Hz', '8 Hz'))
 
         # set Tk
         self.root = Tk.Tk()
@@ -62,6 +60,9 @@ class LossPlot:
 
         selectNone_button = Tk.Button(master=self.root, text='Select None',command=self.select_none, width=8)
         selectNone_button.place(relx=.62, rely=.2, anchor="c")
+
+        showlegend_button = Tk.Button(master=self.root, text='Show Legend',command=self.show_legend_command, width=8)
+        showlegend_button.place(relx=.62, rely=.25, anchor="c")
 
         smooth_label = Tk.Label(self.root,text='smooth:')
         smooth_label.place(relx=.15, rely=.95, anchor="c")
@@ -209,15 +210,16 @@ class LossPlot:
             c, = self.ax.plot(r[:,0],r[:,1],lw=1,color=curve_data['color'],label=str(curve_data['name'])) # 注意!要个','
             self.curves.append(c)
 
-        leg = self.ax.legend(loc='upper left', fancybox=True, shadow=True)
-        leg.get_frame().set_alpha(0.8)
+        if self.show_legend:
+            leg = self.ax.legend(loc='upper left', fancybox=True, shadow=True)
+            leg.get_frame().set_alpha(0.8)
 
-        self.leglines = leg.get_lines()
+            self.leglines = leg.get_lines()
 
-        self.legline2ID = {}
-        for i,legline in enumerate(self.leglines):
-            legline.set_picker(5)
-            self.legline2ID[legline] = i
+            self.legline2ID = {}
+            for i, legline in enumerate(self.leglines):
+                legline.set_picker(5)
+                self.legline2ID[legline] = i
 
         self.line2ID = {}
         for i,line in enumerate(self.curves):
@@ -227,11 +229,16 @@ class LossPlot:
         # re-plot
         for i in range(self.ID):
             if self.curves_select[i]:
-                self.leglines[i].set_alpha(1)
                 self.curves[i].set_alpha(1)
             else:
-                self.leglines[i].set_alpha(self.alpha)
                 self.curves[i].set_alpha(self.alpha)
+
+        if self.show_legend:
+            for i in range(self.ID):
+                if self.curves_select[i]:
+                    self.leglines[i].set_alpha(1)
+                else:
+                    self.leglines[i].set_alpha(self.alpha)
 
     def reset_clicked(self,):
         for i,_ in enumerate(self.curves_select):
@@ -279,6 +286,14 @@ class LossPlot:
 
     def select_none(self):
         self.curves_select = [False for i in range(self.ID)]
+
+        self.refresh_fig()
+        self.refresh_summary()
+
+        self.fig.canvas.draw()
+
+    def show_legend_command(self):
+        self.show_legend = not self.show_legend
 
         self.refresh_fig()
         self.refresh_summary()
