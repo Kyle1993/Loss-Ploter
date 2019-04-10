@@ -7,7 +7,7 @@ This is a offline Loss Ploter, loss record should be save in list like:
 [(step_num1,value1),(step_num2,value2), ... , (step_numn,valuen)]  
 ```  
 #### Function： 
-1. loss record visualize  
+1. loss record visualize and curve info display  
 2. easy compare between selected cruves  
 3. cruve smooth  
 4. range plot  
