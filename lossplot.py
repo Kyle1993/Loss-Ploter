@@ -149,7 +149,7 @@ class LossPlot:
         if isinstance(note,str):
             string += note
         elif isinstance(note,dict):
-            for i,v in note.items():
+            for i,v in sorted(note.items(),key=lambda x:x[0]):
                 string += '{:<10}:{:<10}\n'.format(i,str(v))
         else:
             string += 'None\n'
