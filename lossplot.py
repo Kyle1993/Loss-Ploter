@@ -13,6 +13,14 @@ from matplotlib.figure import Figure
 import numpy as np
 import pickle
 
+
+'''
+record should be: [(step0,value0),(step1,value1),...,(stepn,valuen)]
+.rcd file should be: {'record':record,'name':name,'note':note}
+    record: list,   store record
+    name:   str,    record name
+    note:   dict,   record info
+'''
 class LossPlot:
     def __init__(self,alpha=0.3,show_legend=True,window_size=(16, 8),single_select=False,title='Loss Polt'):
         self.records = []
