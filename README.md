@@ -19,4 +19,4 @@ This is a offline Loss Ploter, loss record should be save in list like:
 4. Config & Curve Summary will print last click curve no matter whether it be selected   
 5. tkinter is not  work in the version of python that comes with  MacOS, install new version in python.org  
 
-![note](D:\PythonProject\Loss-Ploter\note.PNG)
+![note](note.PNG)
